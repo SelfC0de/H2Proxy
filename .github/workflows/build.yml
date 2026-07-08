@@ -77,6 +77,9 @@ jobs:
           cp $APP_PROFILE_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$APP_UUID.mobileprovision
           cp $TUNNEL_PROFILE_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$TUNNEL_UUID.mobileprovision
 
+      - name: Generate app icon
+        run: swift Scripts/generate_icon.swift
+
       - name: Generate Xcode project
         env:
           H2PROXY_TEAM_ID: ${{ secrets.TEAM_ID }}
