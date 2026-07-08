@@ -4,29 +4,31 @@ import Foundation
 import CoreGraphics
 import CoreText
 import ImageIO
-import UniformTypeIdentifiers
+
+let srgb = CGColorSpaceCreateDeviceRGB()
+
+func rgba(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat) -> CGColor {
+    CGColor(colorSpace: srgb, components: [r, g, b, a])!
+}
 
 func createIcon(size: Int) -> CGImage? {
     let w = size
     let h = size
-    let colorSpace = CGColorSpaceCreateDeviceRGB()
     guard let ctx = CGContext(
         data: nil, width: w, height: h,
         bitsPerComponent: 8, bytesPerRow: 0,
-        space: colorSpace,
+        space: srgb,
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     ) else { return nil }
 
-    let rect = CGRect(x: 0, y: 0, width: w, height: h)
-
     // Background gradient: deep navy to dark teal
     let gradientColors = [
-        CGColor(red: 0.05, green: 0.08, blue: 0.18, alpha: 1.0),
-        CGColor(red: 0.02, green: 0.15, blue: 0.25, alpha: 1.0),
-        CGColor(red: 0.04, green: 0.22, blue: 0.35, alpha: 1.0)
+        rgba(0.05, 0.08, 0.18, 1.0),
+        rgba(0.02, 0.15, 0.25, 1.0),
+        rgba(0.04, 0.22, 0.35, 1.0)
     ] as CFArray
     let gradientLocations: [CGFloat] = [0.0, 0.5, 1.0]
-    if let gradient = CGGradient(colorsSpace: colorSpace, colors: gradientColors, locations: gradientLocations) {
+    if let gradient = CGGradient(colorsSpace: srgb, colors: gradientColors, locations: gradientLocations) {
         ctx.drawLinearGradient(gradient,
             start: CGPoint(x: 0, y: CGFloat(h)),
             end: CGPoint(x: CGFloat(w), y: 0),
@@ -34,7 +36,7 @@ func createIcon(size: Int) -> CGImage? {
     }
 
     // Subtle grid pattern
-    ctx.setStrokeColor(CGColor(red: 0.2, green: 0.4, blue: 0.6, alpha: 0.06))
+    ctx.setStrokeColor(rgba(0.2, 0.4, 0.6, 0.06))
     ctx.setLineWidth(CGFloat(size) / 512.0)
     let gridStep = CGFloat(size) / 16.0
     for i in 0...16 {
@@ -52,12 +54,12 @@ func createIcon(size: Int) -> CGImage? {
     let orbRadius = CGFloat(size) * 0.28
 
     let orbColors = [
-        CGColor(red: 0.0, green: 0.7, blue: 0.9, alpha: 0.4),
-        CGColor(red: 0.0, green: 0.5, blue: 0.8, alpha: 0.15),
-        CGColor(red: 0.0, green: 0.3, blue: 0.6, alpha: 0.0)
+        rgba(0.0, 0.7, 0.9, 0.4),
+        rgba(0.0, 0.5, 0.8, 0.15),
+        rgba(0.0, 0.3, 0.6, 0.0)
     ] as CFArray
     let orbLocations: [CGFloat] = [0.0, 0.5, 1.0]
-    if let orbGradient = CGGradient(colorsSpace: colorSpace, colors: orbColors, locations: orbLocations) {
+    if let orbGradient = CGGradient(colorsSpace: srgb, colors: orbColors, locations: orbLocations) {
         ctx.drawRadialGradient(orbGradient,
             startCenter: CGPoint(x: cx, y: cy), startRadius: 0,
             endCenter: CGPoint(x: cx, y: cy), endRadius: orbRadius * 1.8,
@@ -89,12 +91,12 @@ func createIcon(size: Int) -> CGImage? {
     ctx.addPath(shieldPath)
     ctx.clip()
     let shieldColors = [
-        CGColor(red: 0.0, green: 0.65, blue: 0.95, alpha: 0.85),
-        CGColor(red: 0.0, green: 0.45, blue: 0.85, alpha: 0.7),
-        CGColor(red: 0.1, green: 0.3, blue: 0.7, alpha: 0.6)
+        rgba(0.0, 0.65, 0.95, 0.85),
+        rgba(0.0, 0.45, 0.85, 0.7),
+        rgba(0.1, 0.3, 0.7, 0.6)
     ] as CFArray
     let shieldLocations: [CGFloat] = [0.0, 0.5, 1.0]
-    if let shieldGrad = CGGradient(colorsSpace: colorSpace, colors: shieldColors, locations: shieldLocations) {
+    if let shieldGrad = CGGradient(colorsSpace: srgb, colors: shieldColors, locations: shieldLocations) {
         ctx.drawLinearGradient(shieldGrad,
             start: CGPoint(x: cx, y: shieldY),
             end: CGPoint(x: cx, y: shieldY + shieldH),
@@ -103,7 +105,7 @@ func createIcon(size: Int) -> CGImage? {
     ctx.restoreGState()
 
     // Shield border glow
-    ctx.setStrokeColor(CGColor(red: 0.3, green: 0.8, blue: 1.0, alpha: 0.8))
+    ctx.setStrokeColor(rgba(0.3, 0.8, 1.0, 0.8))
     ctx.setLineWidth(s / 200.0)
     ctx.addPath(shieldPath)
     ctx.strokePath()
@@ -111,13 +113,13 @@ func createIcon(size: Int) -> CGImage? {
     // "H2" text
     let fontSize = s * 0.18
     let fontName = "HelveticaNeue-Bold" as CFString
-    guard let font = CTFontCreateWithName(fontName, fontSize, nil) as CTFont? else { return ctx.makeImage() }
+    let font = CTFontCreateWithName(fontName, fontSize, nil)
 
-    let textAttrs: [NSAttributedString.Key: Any] = [
-        .font: font,
-        .foregroundColor: CGColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.95)
-    ]
-    let attrStr = NSAttributedString(string: "H2", attributes: textAttrs)
+    let textAttrs = [
+        kCTFontAttributeName: font,
+        kCTForegroundColorAttributeName: rgba(1.0, 1.0, 1.0, 0.95)
+    ] as CFDictionary
+    let attrStr = CFAttributedStringCreate(nil, "H2" as CFString, textAttrs)!
     let line = CTLineCreateWithAttributedString(attrStr)
     let textBounds = CTLineGetBoundsWithOptions(line, .useOpticalBounds)
 
@@ -131,12 +133,12 @@ func createIcon(size: Int) -> CGImage? {
 
     // Small "PROXY" subtitle
     let subSize = s * 0.065
-    guard let subFont = CTFontCreateWithName("HelveticaNeue-Medium" as CFString, subSize, nil) as CTFont? else { return ctx.makeImage() }
-    let subAttrs: [NSAttributedString.Key: Any] = [
-        .font: subFont,
-        .foregroundColor: CGColor(red: 0.6, green: 0.85, blue: 1.0, alpha: 0.8)
-    ]
-    let subStr = NSAttributedString(string: "PROXY", attributes: subAttrs)
+    let subFont = CTFontCreateWithName("HelveticaNeue-Medium" as CFString, subSize, nil)
+    let subAttrs = [
+        kCTFontAttributeName: subFont,
+        kCTForegroundColorAttributeName: rgba(0.6, 0.85, 1.0, 0.8)
+    ] as CFDictionary
+    let subStr = CFAttributedStringCreate(nil, "PROXY" as CFString, subAttrs)!
     let subLine = CTLineCreateWithAttributedString(subStr)
     let subBounds = CTLineGetBoundsWithOptions(subLine, .useOpticalBounds)
     let subX = cx - subBounds.width / 2 - subBounds.origin.x
@@ -148,7 +150,7 @@ func createIcon(size: Int) -> CGImage? {
     ctx.restoreGState()
 
     // Top highlight arc
-    ctx.setStrokeColor(CGColor(red: 0.5, green: 0.9, blue: 1.0, alpha: 0.15))
+    ctx.setStrokeColor(rgba(0.5, 0.9, 1.0, 0.15))
     ctx.setLineWidth(s / 180.0)
     ctx.addArc(center: CGPoint(x: cx, y: cy + s * 0.05), radius: s * 0.35,
                startAngle: .pi * 0.2, endAngle: .pi * 0.8, clockwise: false)
