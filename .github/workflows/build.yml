@@ -48,7 +48,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate app icon
-        run: swift Scripts/generate_icon.swift
+        run: |
+          swiftc -o $RUNNER_TEMP/generate_icon \
+            -framework CoreGraphics \
+            -framework CoreText \
+            -framework ImageIO \
+            -framework CoreFoundation \
+            Scripts/generate_icon.swift
+          $RUNNER_TEMP/generate_icon
 
       - name: Generate Xcode project
         env:
