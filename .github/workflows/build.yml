@@ -12,7 +12,7 @@ permissions:
   actions: write
 
 env:
-  XCODE_VERSION: "15.4"
+  XCODE_VERSION: "16.1"
 
 jobs:
   build:
