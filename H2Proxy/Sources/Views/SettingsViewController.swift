@@ -1,4 +1,12 @@
 import UIKit
+import ObjectiveC
+
+private var navRowActionKey: UInt8 = 0
+
+private class ClosureWrapper {
+    let closure: () -> Void
+    init(_ closure: @escaping () -> Void) { self.closure = closure }
+}
 
 class SettingsViewController: UIViewController {
 
@@ -234,8 +242,14 @@ class SettingsViewController: UIViewController {
             chev.centerYAnchor.constraint(equalTo: btn.centerYAnchor)
         ])
 
-        btn.addAction(UIAction { _ in action() }, for: .touchUpInside)
+        objc_setAssociatedObject(btn, &navRowActionKey, ClosureWrapper(action), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        btn.addTarget(self, action: #selector(navRowTapped(_:)), for: .touchUpInside)
         return btn
+    }
+
+    @objc private func navRowTapped(_ sender: UIButton) {
+        guard let wrapper = objc_getAssociatedObject(sender, &navRowActionKey) as? ClosureWrapper else { return }
+        wrapper.closure()
     }
 
     @objc private func toggleChanged(_ toggle: UISwitch) {
