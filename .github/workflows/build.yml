@@ -59,21 +59,30 @@ jobs:
 
       - name: Build (unsigned)
         run: |
+          set -o pipefail
           xcodebuild build \
             -scheme H2Proxy \
-            -destination "generic/platform=iOS" \
-            -derivedDataPath $RUNNER_TEMP/DerivedData \
-            CODE_SIGN_IDENTITY="" \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath ${{ runner.temp }}/DerivedData \
+            CODE_SIGN_IDENTITY=- \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            | xcpretty
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            2>&1 | xcpretty
 
       - name: Package unsigned app
         run: |
-          APP_PATH=$(find $RUNNER_TEMP/DerivedData -name "H2Proxy.app" -type d | head -1)
-          mkdir -p $RUNNER_TEMP/Payload
-          cp -R "$APP_PATH" $RUNNER_TEMP/Payload/
-          cd $RUNNER_TEMP && zip -r H2Proxy-unsigned.ipa Payload/
+          APP_PATH=$(find "${{ runner.temp }}/DerivedData" -name "H2Proxy.app" -type d | head -1)
+          echo "Found app at: $APP_PATH"
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: H2Proxy.app not found"
+            find "${{ runner.temp }}/DerivedData" -type d -name "*.app" || true
+            exit 1
+          fi
+          mkdir -p "${{ runner.temp }}/Payload"
+          cp -R "$APP_PATH" "${{ runner.temp }}/Payload/"
+          cd "${{ runner.temp }}" && zip -r H2Proxy-unsigned.ipa Payload/
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
