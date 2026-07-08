@@ -1,0 +1,15 @@
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+.DS_Store
+*.hmap
+*.xccheckout
+*.moved-aside
+*.pbxuser
+*.perspectivev3
+!default.pbxuser
+!default.perspectivev3

@@ -1,0 +1,139 @@
+name: Build H2Proxy IPA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  XCODE_VERSION: "15.4"
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache Swift build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-xcode-${{ hashFiles('project.yml', '**/*.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-
+
+      - name: Delete old caches
+        run: |
+          echo "Cleaning caches older than 1 day..."
+          gh cache list --json id,createdAt --jq '.[] | select(now - (.createdAt | fromdateiso8601) > 86400) | .id' | while read id; do
+            gh cache delete "$id" || true
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install certificate and provisioning profile
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+          APP_PROFILE_BASE64: ${{ secrets.APP_PROFILE_BASE64 }}
+          TUNNEL_PROFILE_BASE64: ${{ secrets.TUNNEL_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          APP_PROFILE_PATH=$RUNNER_TEMP/app.mobileprovision
+          TUNNEL_PROFILE_PATH=$RUNNER_TEMP/tunnel.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$APP_PROFILE_BASE64" | base64 --decode -o $APP_PROFILE_PATH
+          echo -n "$TUNNEL_PROFILE_BASE64" | base64 --decode -o $TUNNEL_PROFILE_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          APP_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i $APP_PROFILE_PATH))
+          TUNNEL_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i $TUNNEL_PROFILE_PATH))
+          cp $APP_PROFILE_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$APP_UUID.mobileprovision
+          cp $TUNNEL_PROFILE_PATH ~/Library/MobileDevice/Provisioning\ Profiles/$TUNNEL_UUID.mobileprovision
+
+      - name: Generate Xcode project
+        env:
+          H2PROXY_TEAM_ID: ${{ secrets.TEAM_ID }}
+          H2PROXY_APP_PROFILE: ${{ secrets.APP_PROFILE_NAME }}
+          H2PROXY_TUNNEL_PROFILE: ${{ secrets.TUNNEL_PROFILE_NAME }}
+        run: xcodegen generate
+
+      - name: Build archive
+        env:
+          H2PROXY_TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          xcodebuild archive \
+            -scheme H2Proxy \
+            -archivePath $RUNNER_TEMP/H2Proxy.xcarchive \
+            -destination "generic/platform=iOS" \
+            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=$H2PROXY_TEAM_ID \
+            | xcpretty
+
+      - name: Export IPA
+        run: |
+          cat > $RUNNER_TEMP/ExportOptions.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>ad-hoc</string>
+              <key>teamID</key>
+              <string>${{ secrets.TEAM_ID }}</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.h2proxy.app</key>
+                  <string>${{ secrets.APP_PROFILE_NAME }}</string>
+                  <key>com.h2proxy.app.tunnel</key>
+                  <string>${{ secrets.TUNNEL_PROFILE_NAME }}</string>
+              </dict>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/H2Proxy.xcarchive \
+            -exportPath $RUNNER_TEMP/export \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+            | xcpretty
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: H2Proxy-${{ github.sha }}
+          path: ${{ runner.temp }}/export/H2Proxy.ipa
+          retention-days: 1
+
+      - name: Cleanup keychain
+        if: always()
+        run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
