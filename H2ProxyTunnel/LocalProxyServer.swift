@@ -10,7 +10,7 @@ class LocalProxyServer {
     private let password: String?
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "com.h2proxy.localproxy", qos: .userInitiated)
-    private var connections: [UUID: ClientConnection] = []
+    private var connections: [UUID: ClientConnection] = [:]
     var onBytesTransferred: ((Int64, Int64) -> Void)?
 
     init(listenPort: UInt16, remoteHost: String, remotePort: UInt16, proto: ProxyProtocol, username: String?, password: String?) {
@@ -409,7 +409,7 @@ class ClientConnection {
                     return
                 }
                 // Send SETTINGS ACK
-                var ack = Data([0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00])
+                let ack = Data([0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00])
                 self?.remote?.send(content: ack, completion: .contentProcessed { _ in })
                 completion(nil)
             }
